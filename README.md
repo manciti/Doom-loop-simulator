@@ -17,8 +17,8 @@ This is a simple web app simulating the "Doom loop", i.e. a negative feedback sp
 6. Click the "Reset" button to start over
 
 ## Prameters
-- Resolution (toggle on or off) Represents the effect of a Single Resolution Mechanism (SRM)/Bail-in 
-- Risk Sharing (toggle on or off) Represents the effect of risk sharing mechanisms such as a European Deposit Insurance Scheme (EDIS)
+- **Resolution** (toggle on or off) Represents the effect of a Single Resolution Mechanism (SRM)/Bail-in 
+- **Risk Sharing** (toggle on or off) Represents the effect of risk sharing mechanisms such as a European Deposit Insurance Scheme (EDIS)
 
 ## Results
 
