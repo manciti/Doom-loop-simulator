@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sovereign-Bank Doom Loop Simulator</title>
+    <!-- Load Tailwind CSS from CDN for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load React and ReactDOM from CDNs -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Load Babel for JSX compilation in the browser -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        /* Define custom styles for animations and smooth transitions */
+        body { font-family: 'Inter', sans-serif; }
+        .transition-colors { transition: background-color 0.3s, color 0.3s, border-color 0.3s; }
+        .transition-all { transition: all 0.5s ease-in-out; }
+        /* Adjusted pulse for better visibility */
+        .animate-pulse { animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite; } 
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .7; }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // Placeholder components for the removed Lucide icons, ensuring stability
+        const IconActivity = (props) => <span className="mr-2 text-slate-500" {...props}>⚙️</span>;
+        const IconAlertTriangle = (props) => <span className="mr-2" {...props}>⚠️</span>;
+        const IconShield = (props) => <span className="mr-2" {...props}>🛡️</span>;
+        const IconLock = (props) => <span className="mr-2" {...props}>🔗</span>;
+        const IconLandmark = (props) => <span className="mr-2" {...props}>🏛️</span>;
+        const IconRefreshCw = (props) => <span className="mr-2" {...props}>🔄</span>;
+        const IconTrendingDown = (props) => <span className="mr-2" {...props}>📉</span>;
+
+        // --- Component: The Doom Loop App ---
+
+        const DoomLoopApp = () => {
+          // State Management
+          const [isRunning, setIsRunning] = React.useState(false);
+          const [simState, setSimState] = React.useState({
+            sovereignHealth: 100,
+            bankHealth: 100,
+            economicHealth: 100,
+            iteration: 0,
+          });
+          
+          const [policies, setPolicies] = React.useState({
+            srmActive: false,
+            diversification: false,
+          });
+
+          const [activeChannel, setActiveChannel] = React.useState(null);
+          const loopInterval = React.useRef(null);
+
+          // --- Simulation Logic ---
+
+          const triggerShock = () => {
+            setIsRunning(true);
+            setSimState(prev => ({
+              ...prev,
+              sovereignHealth: 60, // Initial shock to sovereign debt markets
+              iteration: 1
+            }));
+          };
+
+          const resetSim = () => {
+            setIsRunning(false);
+            if (loopInterval.current) clearInterval(loopInterval.current);
+            setActiveChannel(null);
+            setSimState({
+              sovereignHealth: 100,
+              bankHealth: 100,
+              economicHealth: 100,
+              iteration: 0,
+            });
+          };
+
+          // The Transmission Mechanism Loop
+          React.useEffect(() => {
+            if (!isRunning) return;
+
+            loopInterval.current = setInterval(() => {
+              setSimState(prev => {
+                let { sovereignHealth, bankHealth, economicHealth, iteration } = prev;
+                
+                // Stop if system collapses or stabilizes
+                if (sovereignHealth <= 10 || bankHealth <= 10 || economicHealth <= 10) {
+                  setIsRunning(false);
+                  setActiveChannel(null);
+                  return prev;
+                }
+
+                // 1. Sovereign -> Bank Channel (Asset Value Erosion)
+                // Mechanism: Banks hold sovereign bonds. If yields rise (health falls), bank capital erodes.
+                // Mitigation: Diversification (Home bias reduction) reduces this impact.
+                let bankDamage = (100 - sovereignHealth) * 0.4; 
+                if (policies.diversification) bankDamage *= 0.2; // 80% reduction in impact
+                
+                const newBankHealth = Math.max(0, bankHealth - (bankDamage * 0.1));
+                if (bankDamage > 2) setActiveChannel('sovereign-bank');
+
+                // 2. Bank -> Economy Channel (Credit Crunch)
+                // Mechanism: Capital constrained banks cut lending.
+                // Mitigation: None direct in this simplified model, dependent on bank health.
+                let econDamage = (100 - newBankHealth) * 0.3;
+                const newEconHealth = Math.max(0, economicHealth - (econDamage * 0.1));
+                if (econDamage > 2 && activeChannel !== 'sovereign-bank') setActiveChannel('bank-economy');
+
+                // 3. Economy -> Sovereign Channel (Fiscal Erosion)
+                // Mechanism: Recession reduces tax take, increases auto-stabilizers (unemployment benefits).
+                // Mitigation: None direct (Fiscal Union would help here, but outside scope of Banking Union).
+                let fiscalDamage = (100 - newEconHealth) * 0.3;
+                let newSovereignHealth = Math.max(0, sovereignHealth - (fiscalDamage * 0.1));
+                if (fiscalDamage > 2 && activeChannel !== 'bank-economy') setActiveChannel('economy-sovereign');
+
+                // 4. Bank -> Sovereign Channel (Bailouts)
+                // Mechanism: Failing banks require state recapitalization.
+                // Mitigation: SRM (Bail-in) forces investors to take loss, protecting sovereign balance sheet.
+                if (newBankHealth < 50) {
+                   let bailoutCost = (50 - newBankHealth) * 0.5;
+                   if (policies.srmActive) bailoutCost = 0; // Bail-in tool protects taxpayer
+                   
+                   newSovereignHealth -= bailoutCost;
+                   if (bailoutCost > 0) setActiveChannel('bank-bailout');
+                }
+
+                return {
+                  sovereignHealth: newSovereignHealth,
+                  bankHealth: newBankHealth,
+                  economicHealth: newEconHealth,
+                  iteration: iteration + 1
+                };
+              });
+            }, 800);
+
+            return () => {
+              if (loopInterval.current) clearInterval(loopInterval.current);
+            };
+          }, [isRunning, policies, activeChannel]);
+
+
+          // --- Helper for Colors ---
+          const getStatusColor = (value) => {
+            if (value > 75) return 'bg-emerald-100 text-emerald-800 border-emerald-300';
+            if (value > 40) return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+            return 'bg-red-100 text-red-800 border-red-300 animate-pulse';
+          };
+          
+          const getBarColor = (value) => {
+            if (value > 75) return 'bg-emerald-500';
+            if (value > 40) return 'bg-yellow-500';
+            return 'bg-red-500';
+          };
+
+          return (
+            <div className="min-h-screen bg-slate-50 font-sans text-slate-800 p-4 md:p-8">
+              <div className="max-w-6xl mx-auto space-y-6">
+                
+                {/* Header Section */}
+                <header className="border-b border-slate-200 pb-4">
+                  <div className="flex items-center space-x-2 text-indigo-700 mb-1">
+                    <span className="w-5 h-5">📊</span>
+                    <span className="text-sm font-semibold tracking-wide uppercase">Economic Simulation Tool</span>
+                  </div>
+                  <h1 className="text-3xl md:text-4xl font-bold text-slate-900">The Sovereign-Bank Nexus ("Doom Loop") by Manuele Citi</h1>
+                  <p className="mt-2 text-lg text-slate-600 max-w-3xl">
+                    A Wep App to demonstrate the feedback mechanisms between sovereign debt, banking stability, and the real economy, and how EU Banking Union pillars aim to sever these links.
+                  </p>
+                </header>
+
+                {/* Main Content Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  
+                  {/* Left Column: Controls & Metrics */}
+                  <div className="space-y-6">
+                    
+                    {/* Simulation Controls */}
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                      <h3 className="text-lg font-semibold mb-4 flex items-center">
+                        <IconActivity className="w-5 h-5 mr-2 text-slate-500" />
+                        System Controls
+                      </h3>
+                      
+                      <div className="flex space-x-3 mb-6">
+                        {!isRunning && simState.iteration === 0 && (
+                          <button 
+                            onClick={triggerShock}
+                            className="flex-1 bg-red-600 hover:bg-red-700 text-white px-4 py-3 rounded-lg font-medium transition-colors shadow-sm flex items-center justify-center"
+                          >
+                            <IconAlertTriangle className="w-4 h-4 mr-2" />
+                            Trigger Shock
+                          </button>
+                        )}
+                        
+                        {(isRunning || simState.iteration > 0) && (
+                          <button 
+                            onClick={resetSim}
+                            className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-lg font-medium transition-colors flex items-center justify-center border border-slate-300"
+                          >
+                            <IconRefreshCw className="w-4 h-4 mr-2" />
+                            Reset Model
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-center p-3 bg-slate-50 rounded-lg border border-slate-100">
+                          <div className="flex items-center">
+                            <div className={`w-8 h-4 rounded-full mr-3 cursor-pointer transition-colors ${policies.srmActive ? 'bg-indigo-600' : 'bg-slate-300'}`} onClick={() => setPolicies(p => ({...p, srmActive: !p.srmActive}))}>
+                              <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform ${policies.srmActive ? 'translate-x-4' : 'translate-x-0'}`} />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-sm">Resolution (SRM/Bail-in)</p>
+                              <p className="text-xs text-slate-500">Prevents Taxpayer Bailouts</p>
+                            </div>
+                          </div>
+                          <IconShield className={`w-4 h-4 ${policies.srmActive ? 'text-indigo-600' : 'text-slate-300'}`} />
+                        </div>
+
+                        <div className="flex justify-between items-center p-3 bg-slate-50 rounded-lg border border-slate-100">
+                          <div className="flex items-center">
+                            <div className={`w-8 h-4 rounded-full mr-3 cursor-pointer transition-colors ${policies.diversification ? 'bg-indigo-600' : 'bg-slate-300'}`} onClick={() => setPolicies(p => ({...p, diversification: !p.diversification}))}>
+                              <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform ${policies.diversification ? 'translate-x-4' : 'translate-x-0'}`} />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-sm">Risk Sharing (EDIS/SBBS)</p>
+                              <p className="text-xs text-slate-500">Reduces Home Bias & Capital Flight</p>
+                            </div>
+                          </div>
+                          <IconLock className={`w-4 h-4 ${policies.diversification ? 'text-indigo-600' : 'text-slate-300'}`} />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Metrics */}
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 space-y-5">
+                      <h3 className="text-lg font-semibold">Macro Indicators</h3>
+                      
+                      <MetricBar 
+                        label="Sovereign Creditworthiness" 
+                        value={simState.sovereignHealth} 
+                        color={getBarColor(simState.sovereignHealth)}
+                      />
+                      <MetricBar 
+                        label="Banking Sector Capital" 
+                        value={simState.bankHealth} 
+                        color={getBarColor(simState.bankHealth)}
+                      />
+                      <MetricBar 
+                        label="Real Economy (GDP)" 
+                        value={simState.economicHealth} 
+                        color={getBarColor(simState.economicHealth)}
+                      />
+
+                      <div className="mt-4 pt-4 border-t border-slate-100 text-sm text-slate-500 italic">
+                        {simState.sovereignHealth <= 10 && <span className="text-red-600 font-bold">State Default. System Collapse.</span>}
+                        {simState.bankHealth <= 10 && <span className="text-red-600 font-bold">Banking Crisis. Credit Freezes.</span>}
+                        {simState.iteration > 0 && simState.sovereignHealth > 10 && simState.bankHealth > 10 && "Simulation Active..."}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Center Column: The Visual Diagram */}
+                  <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col items-center justify-center relative overflow-hidden">
+                    
+                    {/* The Interactive Graph */}
+                    <div className="relative w-full max-w-xl aspect-square md:aspect-[4/3]">
+                        
+                        {/* Node: Sovereign */}
+                        <div className={`absolute top-0 left-1/2 transform -translate-x-1/2 w-48 p-4 rounded-xl border-2 transition-all duration-500 z-10 ${getStatusColor(simState.sovereignHealth)}`}>
+                          <div className="flex items-center justify-between mb-2">
+                            <IconLandmark className="w-5 h-5" />
+                            <span className="font-bold text-sm">Sovereign</span>
+                          </div>
+                          <p className="text-xs leading-tight">
+                            {simState.sovereignHealth < 50 ? "Yields spiking. Debt sustainability concerns." : "Stable fiscal position."}
+                          </p>
+                        </div>
+
+                        {/* Node: Banks */}
+                        <div className={`absolute bottom-0 right-0 w-48 p-4 rounded-xl border-2 transition-all duration-500 z-10 ${getStatusColor(simState.bankHealth)}`}>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="font-bold text-sm">Banking Sector</div>
+                          </div>
+                          <p className="text-xs leading-tight">
+                            {simState.bankHealth < 50 ? "Capital eroded. Lending constricted." : "High CET1 ratios. Liquid."}
+                          </p>
+                        </div>
+
+                        {/* Node: Real Economy */}
+                        <div className={`absolute bottom-0 left-0 w-48 p-4 rounded-xl border-2 transition-all duration-500 z-10 ${getStatusColor(simState.economicHealth)}`}>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="font-bold text-sm">Real Economy</div>
+                            <IconTrendingDown className={`w-4 h-4 ${simState.economicHealth < 50 ? 'block' : 'hidden'}`} />
+                          </div>
+                          <p className="text-xs leading-tight">
+                            {simState.economicHealth < 50 ? "Recession. High Unemployment." : "Growth. Low Unemployment."}
+                          </p>
+                        </div>
+
+                        {/* Connection Arrows & Logic Visuals */}
+                        <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
+                          <defs>
+                            <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                              <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8" />
+                            </marker>
+                            <marker id="arrowhead-active" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                              <polygon points="0 0, 10 3.5, 0 7" fill="#ef4444" />
+                            </marker>
+                          </defs>
+
+                          {/* 1. Sovereign -> Bank (Home Bias) */}
+                          <g className={`transition-opacity duration-300 ${activeChannel === 'sovereign-bank' ? 'opacity-100' : 'opacity-40'}`}>
+                            <path d="M 300 80 Q 400 150 450 350" fill="none" stroke={activeChannel === 'sovereign-bank' ? '#ef4444' : '#cbd5e1'} strokeWidth="4" markerEnd={activeChannel === 'sovereign-bank' ? "url(#arrowhead-active)" : "url(#arrowhead)"} strokeDasharray="5,5" />
+                            <text x="380" y="180" className="text-[10px] fill-slate-500 font-semibold bg-white">
+                              1. Asset Erosion
+                            </text>
+                            {policies.diversification && (
+                              <rect x="360" y="160" width="80" height="20" rx="4" fill="#4f46e5" className="animate-pulse opacity-90" />
+                            )}
+                            {policies.diversification && (
+                                <text x="400" y="174" textAnchor="middle" className="text-[10px] fill-white font-bold pointer-events-none">Risk Sharing Shield</text>
+                            )}
+                          </g>
+
+                          {/* 2. Bank -> Economy (Credit Crunch) */}
+                          <g className={`transition-opacity duration-300 ${activeChannel === 'bank-economy' ? 'opacity-100' : 'opacity-40'}`}>
+                            <path d="M 450 400 L 200 400" fill="none" stroke={activeChannel === 'bank-economy' ? '#ef4444' : '#cbd5e1'} strokeWidth="4" markerEnd={activeChannel === 'bank-economy' ? "url(#arrowhead-active)" : "url(#arrowhead)"} />
+                            <text x="300" y="390" className="text-[10px] fill-slate-500 font-semibold">
+                              2. Credit Crunch
+                            </text>
+                          </g>
+
+                          {/* 3. Economy -> Sovereign (Fiscal) */}
+                          <g className={`transition-opacity duration-300 ${activeChannel === 'economy-sovereign' ? 'opacity-100' : 'opacity-40'}`}>
+                            <path d="M 100 350 Q 150 150 250 80" fill="none" stroke={activeChannel === 'economy-sovereign' ? '#ef4444' : '#cbd5e1'} strokeWidth="4" markerEnd={activeChannel === 'economy-sovereign' ? "url(#arrowhead-active)" : "url(#arrowhead)"} />
+                            <text x="120" y="200" className="text-[10px] fill-slate-500 font-semibold">
+                              3. Deficits
+                            </text>
+                          </g>
+
+                          {/* 4. Bank -> Sovereign (Bailout) */}
+                          <g className={`transition-opacity duration-300 ${activeChannel === 'bank-bailout' ? 'opacity-100' : 'opacity-40'}`}>
+                            <path d="M 480 350 Q 550 150 350 50" fill="none" stroke={activeChannel === 'bank-bailout' ? '#ef4444' : '#cbd5e1'} strokeWidth="4" markerEnd={activeChannel === 'bank-bailout' ? "url(#arrowhead-active)" : "url(#arrowhead)"} />
+                            <text x="500" y="200" className="text-[10px] fill-slate-500 font-semibold">
+                              4. Bailout Costs
+                            </text>
+                            {policies.srmActive && (
+                              <rect x="440" y="180" width="80" height="20" rx="4" fill="#4f46e5" className="animate-pulse opacity-90" />
+                            )}
+                            {policies.srmActive && (
+                                <text x="480" y="194" textAnchor="middle" className="text-[10px] fill-white font-bold pointer-events-none">Bail-in Shield</text>
+                            )}
+                          </g>
+
+                        </svg>
+
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Academic Context Section */}
+                <section className="bg-slate-100 rounded-xl p-6 border border-slate-200 mt-8">
+                  <h2 className="text-xl font-bold text-slate-800 mb-4">Academic & Policy Implications</h2>
+                  <div className="grid md:grid-cols-2 gap-8 text-sm text-slate-700 leading-relaxed">
+                    <div>
+                      <h4 className="font-semibold text-slate-900 mb-2">The Mechanism (Home Bias)</h4>
+                      <p className="mb-3">
+                        The simulation demonstrates the core fragility of the pre-Banking Union Eurozone. 
+                        Because banks hold significant amounts of their domestic sovereign's debt (often zero risk-weighted), 
+                        a deterioration in sovereign creditworthiness immediately erodes bank capital (Channel 1).
+                      </p>
+                      <h4 className="font-semibold text-slate-900 mb-2">The "Diabolic" Feedback</h4>
+                      <p>
+                        As banks weaken, they cut credit to the real economy (Channel 2), causing recession. 
+                        The recession widens the fiscal deficit (Channel 3). Ultimately, if the state attempts 
+                        to rescue the banks (Channel 4), it destroys its own solvency, restarting the cycle with greater intensity.
+                      </p>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-slate-900 mb-2">Policy Intervention: The Three Pillars</h4>
+                      <ul className="space-y-2 list-disc pl-4">
+                        <li>
+                          <strong className="text-indigo-700">SRM (Resolution):</strong> Activating the "Resolution" toggle simulates the 
+                          Bail-in tool (BRRD). By forcing creditors to absorb losses, the sovereign is shielded from bailout costs, severing Channel 4.
+                        </li>
+                        <li>
+                          <strong className="text-indigo-700">EDIS / Diversification:</strong> Activating "Risk Sharing" simulates the incomplete third pillar. 
+                          Effective deposit insurance and reduced home bias (via SBBS or diversification) insulate banks from sovereign shocks, weakening Channel 1.
+                        </li>
+                      </ul>
+                      <div className="mt-4 p-3 bg-indigo-50 text-indigo-800 rounded border border-indigo-100 text-xs">
+                        <strong>Forward-Thinking Note:</strong> While the SSM and SRM are operational, the lack of a fully mutualized 
+                        Deposit Insurance Scheme (EDIS) leaves the loop partially open. Current policy debates (CMDI review) focus on handling medium-sized banks that fall between the cracks of national liquidation and European resolution.
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+              </div>
+            </div>
+          );
+        };
+
+        // Subcomponent for Progress Bars
+        const MetricBar = ({ label, value, color }) => (
+          <div>
+            <div className="flex justify-between text-xs font-medium text-slate-500 mb-1">
+              <span>{label}</span>
+              <span>{Math.round(value)}%</span>
+            </div>
+            <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+              <div 
+                className={`h-2.5 rounded-full transition-all duration-500 ${color}`} 
+                style={{ width: `${Math.max(0, value)}%` }}
+              ></div>
+            </div>
+          </div>
+        );
+
+        // Render the main component into the DOM
+        const container = document.getElementById('root');
+        const root = ReactDOM.createRoot(container);
+        root.render(React.createElement(DoomLoopApp));
+    </script>
+</body>
+</html>
